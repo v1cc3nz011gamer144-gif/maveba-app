@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Agenda MaVeBa</title>
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  :root{--navy:#000000;--gold:#e0b04f;--cream:#faf5eb}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--navy);font-family:Georgia,serif;color:var(--cream)}
+  #app{position:fixed;inset:0;width:100%;height:100%;border:0;background:#fff;display:none}
+  .pantalla{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 16px;text-align:center}
+  .pantalla img{width:260px;max-width:80%;height:auto;margin-bottom:4px}
+  h1{color:var(--gold);font-size:24px;margin:0 0 8px}
+  p{margin:0 0 18px;line-height:1.4;max-width:340px;font-size:16px}
+  input{width:100%;max-width:340px;padding:14px;border-radius:12px;border:2px solid var(--gold);font-size:16px;margin-bottom:14px}
+  button{background:var(--gold);color:var(--navy);border:0;border-radius:12px;padding:14px 28px;font-size:17px;font-weight:bold}
+  .error{color:#ffb4a8;min-height:20px;font-size:14px;margin-bottom:14px;max-width:340px}
+  #cargando,#sinInternet,#bienvenida{display:none}
+  .chico{font-size:13px;opacity:.75;margin-top:22px}
+  .chico a{color:var(--gold)}
+</style>
+</head>
+<body>
+
+<!-- 1) Primera vez: la chica pega su link personal -->
+<div class="pantalla" id="bienvenida">
+  <img src="icon-512.png" alt="MaVeBa">
+  <h1>Agenda MaVeBa</h1>
+  <p>Pega aquí <b>tu link personal</b> de la agenda (el que te pasaron por WhatsApp). Solo se hace una vez.</p>
+  <input id="link" type="url" placeholder="https://script.google.com/..." autocomplete="off">
+  <div class="error" id="error"></div>
+  <button onclick="guardarLink()">Entrar</button>
+</div>
+
+<!-- 2) Cargando -->
+<div class="pantalla" id="cargando">
+  <img src="icon-512.png" alt="MaVeBa">
+  <p>Abriendo tu agenda…</p>
+</div>
+
+<!-- 3) Sin internet -->
+<div class="pantalla" id="sinInternet">
+  <img src="icon-512.png" alt="MaVeBa">
+  <h1>Sin internet</h1>
+  <p>La agenda necesita internet. Revisa tu wifi o datos y vuelve a intentar.</p>
+  <button onclick="location.reload()">Reintentar</button>
+</div>
+
+<iframe id="app" allow="clipboard-write; downloads" referrerpolicy="no-referrer-when-downgrade"></iframe>
+
+<script>
+// ===== CONFIGURACIÓN =====
+// Pega aquí el link de la app (Implementar → Gestionar implementaciones → URL de la aplicación web).
+// Termina en /exec. Si lo dejas vacío, cada chica tendrá que pegar su link personal completo.
+var URL_APP = "";
+// =========================
+
+var CLAVE = "maveba_link";
+function leer(){ try{ return localStorage.getItem(CLAVE)||""; }catch(e){ return ""; } }
+function grabar(v){ try{ localStorage.setItem(CLAVE,v); }catch(e){} }
+function borrar(){ try{ localStorage.removeItem(CLAVE); }catch(e){} }
+function ver(id){ ["bienvenida","cargando","sinInternet"].forEach(function(x){ document.getElementById(x).style.display = x===id?"flex":"none"; }); }
+
+function linkValido(v){
+  return /^https:\/\/script\.google\.com\/(a\/[^\/]+\/)?macros\/s\/[^\/]+\/exec/.test(v);
+}
+
+function guardarLink(){
+  var v = document.getElementById("link").value.trim();
+  if(!linkValido(v)){
+    document.getElementById("error").textContent = "Ese link no parece de la agenda. Debe empezar con https://script.google.com/ y tener /exec";
+    return;
+  }
+  grabar(v); abrir(v);
+}
+
+function abrir(v){
+  if(!navigator.onLine){ ver("sinInternet"); return; }
+  ver("cargando");
+  var f = document.getElementById("app");
+  f.onload = function(){ f.style.display="block"; ver(null); };
+  f.src = v;
+}
+
+// Para cambiar de chica en el mismo celular: abrir la página con ?cambiar al final
+(function(){
+  var q = new URLSearchParams(location.search);
+  if(q.has("cambiar")){ borrar(); history.replaceState(null,"",location.pathname); }
+  // También se puede llegar con ?k=u_xxxx (link personal) y se arma solo:
+  if(q.get("k") && URL_APP.indexOf("/exec")>0){
+    var armado = URL_APP + "?k=" + encodeURIComponent(q.get("k"));
+    grabar(armado); history.replaceState(null,"",location.pathname);
+  }
+  var guardado = leer();
+  if(guardado){ abrir(guardado); } else { ver("bienvenida"); }
+  window.addEventListener("offline", function(){ ver("sinInternet"); document.getElementById("app").style.display="none"; });
+})();
+
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(function(){}); }
+</script>
+</body>
+</html>
