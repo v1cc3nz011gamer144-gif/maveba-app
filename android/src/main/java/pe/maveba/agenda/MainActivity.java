@@ -7,7 +7,15 @@ import android.content.ActivityNotFoundException;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.Context;
+import android.content.res.ColorStateList;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.graphics.Typeface;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -56,6 +64,10 @@ public class MainActivity extends Activity {
     static final int NEGRO = Color.parseColor("#000000");
     static final int DORADO = Color.parseColor("#E0B04F");
     static final int CREMA = Color.parseColor("#FAF5EB");
+    static final int BARRA = Color.parseColor("#FBF8F3");      // fondo de la barra (crema como la agenda)
+    static final int LINEA = Color.parseColor("#E9E0D2");      // línea fina arriba de la barra
+    static final int CAFE = Color.parseColor("#5B4A3B");       // íconos y textos
+    static final int TOQUE = Color.parseColor("#33C9A24E");    // brillo dorado al tocar
     static final int REQ_ARCHIVO = 11;
     static final int REQ_PERMISO = 12;
 
@@ -86,11 +98,13 @@ public class MainActivity extends Activity {
         "var wo=window.open;window.open=function(u){if(esFuera(u)){env({t:'abrir',u:String(u)});return null;}return wo.apply(window,arguments);};" +
         "})();";
 
+    // Esconde el aviso gris de Google ("Esta aplicación fue creada por un usuario...")
+    static final String QUITAR_AVISO_JS = "(function(){ if(location.hostname!=='script.google.com'||window.__mvbAviso)return;window.__mvbAviso=1; var RX=/(Apps Script|creada por (otro|un) usuario|created by (another|a Google)|no por Google|not by Google|Informar sobre|Report abuse)/i; var css=document.createElement('style'); css.textContent='html,body{margin:0!important;padding:0!important;overflow:hidden!important;background:#fff!important}'; function arreglar(){ var hecho=false; if(!document.body)return false; if(!css.parentNode)(document.head||document.documentElement).appendChild(css); var todos=document.body.querySelectorAll('div,table,tr,td,span,p,a'); for(var i=0;i<todos.length;i++){ var el=todos[i]; if(el.querySelector('iframe'))continue; var t=el.textContent||''; if(t.length<400&&RX.test(t)){ var c=el; while(c.parentElement&&c.parentElement!==document.body&&!c.parentElement.querySelector('iframe'))c=c.parentElement; if(c.style.display!=='none'){c.style.setProperty('display','none','important');hecho=true;} } } var fr=document.querySelectorAll('iframe'); for(var j=0;j<fr.length;j++){ var f=fr[j]; if(f.offsetWidth<50&&f.offsetHeight<50)continue; f.style.setProperty('position','fixed','important');f.style.setProperty('top','0','important'); f.style.setProperty('left','0','important');f.style.setProperty('width','100%','important'); f.style.setProperty('height','100%','important');f.style.setProperty('border','0','important'); f.style.setProperty('z-index','2147483000','important'); } return hecho; } var mo=new MutationObserver(function(){arreglar();}); function iniciar(){arreglar();try{mo.observe(document.documentElement,{childList:true,subtree:true});}catch(e){}setTimeout(function(){mo.disconnect();},15000);} if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',iniciar);else iniciar(); })();";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setStatusBarColor(NEGRO);
-        getWindow().setNavigationBarColor(NEGRO);
+        pintarBarrasSistema(NEGRO, false);
 
         LinearLayout raiz = new LinearLayout(this);
         raiz.setOrientation(LinearLayout.VERTICAL);
@@ -105,7 +119,10 @@ public class MainActivity extends Activity {
         capa = crearCapa();
         marco.addView(capa, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        raiz.addView(crearBarra(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
+        View linea = new View(this);
+        linea.setBackgroundColor(LINEA);
+        raiz.addView(linea, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, dp(1) / 2)));
+        raiz.addView(crearBarra(), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(58)));
         setContentView(raiz);
 
         configurarWeb();
@@ -163,40 +180,132 @@ public class MainActivity extends Activity {
     }
 
     void mostrarCargando() {
+        pintarBarrasSistema(NEGRO, false);
         capaTexto.setText("Abriendo tu agenda…");
         capaBoton.setVisibility(View.GONE);
         capa.setVisibility(View.VISIBLE);
     }
 
     void mostrarSinInternet() {
+        pintarBarrasSistema(NEGRO, false);
         capaTexto.setText("Sin internet\n\nLa agenda necesita internet.\nRevisa tu wifi o tus datos y vuelve a intentar.");
         capaBoton.setVisibility(View.VISIBLE);
         capa.setVisibility(View.VISIBLE);
+    }
+
+    // ---------- Barras del sistema (hora/batería arriba y botones de Android abajo) ----------
+    void pintarBarrasSistema(int arriba, boolean clara) {
+        getWindow().setStatusBarColor(arriba);
+        getWindow().setNavigationBarColor(clara ? BARRA : NEGRO);
+        View d = getWindow().getDecorView();
+        int f = d.getSystemUiVisibility();
+        if (clara) {
+            f |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            if (Build.VERSION.SDK_INT >= 26) f |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        } else {
+            f &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            if (Build.VERSION.SDK_INT >= 26) f &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        }
+        d.setSystemUiVisibility(f);
     }
 
     // ---------- Barra de abajo ----------
     LinearLayout crearBarra() {
         LinearLayout barra = new LinearLayout(this);
         barra.setOrientation(LinearLayout.HORIZONTAL);
-        barra.setBackgroundColor(NEGRO);
-        barra.addView(botonBarra("◀  Atrás", v -> atras()));
-        barra.addView(botonBarra("⌂  Inicio", v -> abrirInicio("")));
-        barra.addView(botonBarra("⟳  Recargar", v -> recargar()));
-        barra.addView(botonBarra("⋮  Más", v -> menuMas()));
+        barra.setBackgroundColor(BARRA);
+        barra.setPadding(dp(6), 0, dp(6), 0);
+        barra.addView(botonBarra(Icono.ATRAS, "Atrás", v -> atras()));
+        barra.addView(botonBarra(Icono.INICIO, "Inicio", v -> abrirInicio("")));
+        barra.addView(botonBarra(Icono.RECARGAR, "Recargar", v -> recargar()));
+        barra.addView(botonBarra(Icono.MAS, "Más", v -> menuMas()));
         return barra;
     }
 
-    TextView botonBarra(String t, View.OnClickListener l) {
-        TextView b = new TextView(this);
-        b.setText(t);
-        b.setTextColor(DORADO);
-        b.setTextSize(14);
+    LinearLayout botonBarra(int tipo, String texto, View.OnClickListener l) {
+        LinearLayout b = new LinearLayout(this);
+        b.setOrientation(LinearLayout.VERTICAL);
         b.setGravity(Gravity.CENTER);
-        b.setTypeface(Typeface.SERIF, Typeface.BOLD);
+        b.setClickable(true);
+        b.setFocusable(true);
         b.setOnClickListener(l);
-        b.setBackgroundResource(android.R.drawable.list_selector_background);
+        b.setContentDescription(texto);
+        b.setBackground(new RippleDrawable(ColorStateList.valueOf(TOQUE), null, new ColorDrawable(Color.WHITE)));
         b.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+
+        Icono ic = new Icono(this, tipo, CAFE);
+        b.addView(ic, new LinearLayout.LayoutParams(dp(24), dp(24)));
+
+        TextView t = new TextView(this);
+        t.setText(texto);
+        t.setTextColor(CAFE);
+        t.setTextSize(11);
+        t.setLetterSpacing(0.02f);
+        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(0, dp(3), 0, 0);
+        b.addView(t);
         return b;
+    }
+
+    // Íconos de línea finos, dibujados a mano (sin imágenes)
+    static class Icono extends View {
+        static final int ATRAS = 0, INICIO = 1, RECARGAR = 2, MAS = 3;
+        final int tipo;
+        final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        final Path path = new Path();
+
+        Icono(Context c, int tipo, int color) {
+            super(c);
+            this.tipo = tipo;
+            p.setColor(color);
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeCap(Paint.Cap.ROUND);
+            p.setStrokeJoin(Paint.Join.ROUND);
+        }
+
+        @Override
+        protected void onDraw(Canvas c) {
+            float u = getWidth() / 24f;           // dibujo en una cuadrícula de 24x24
+            p.setStrokeWidth(1.8f * u);
+            p.setStyle(Paint.Style.STROKE);
+            path.reset();
+            if (tipo == ATRAS) {
+                path.moveTo(14.5f * u, 5.5f * u);
+                path.lineTo(8f * u, 12f * u);
+                path.lineTo(14.5f * u, 18.5f * u);
+                c.drawPath(path, p);
+            } else if (tipo == INICIO) {
+                path.moveTo(4f * u, 11f * u);
+                path.lineTo(12f * u, 4.5f * u);
+                path.lineTo(20f * u, 11f * u);
+                c.drawPath(path, p);
+                path.reset();
+                path.moveTo(6.5f * u, 9.5f * u);
+                path.lineTo(6.5f * u, 19.5f * u);
+                path.lineTo(17.5f * u, 19.5f * u);
+                path.lineTo(17.5f * u, 9.5f * u);
+                c.drawPath(path, p);
+                path.reset();
+                path.moveTo(10.25f * u, 19.5f * u);
+                path.lineTo(10.25f * u, 14.5f * u);
+                path.lineTo(13.75f * u, 14.5f * u);
+                path.lineTo(13.75f * u, 19.5f * u);
+                c.drawPath(path, p);
+            } else if (tipo == RECARGAR) {
+                RectF r = new RectF(5f * u, 5f * u, 19f * u, 19f * u);
+                c.drawArc(r, -30f, 300f, false, p);     // círculo abierto arriba a la derecha
+                path.moveTo(9.8f * u, 2.2f * u);          // punta de flecha arriba
+                path.lineTo(12.8f * u, 5f * u);
+                path.lineTo(9.8f * u, 7.8f * u);
+                c.drawPath(path, p);
+            } else {
+                p.setStyle(Paint.Style.FILL);
+                c.drawCircle(5.5f * u, 12f * u, 1.6f * u, p);
+                c.drawCircle(12f * u, 12f * u, 1.6f * u, p);
+                c.drawCircle(18.5f * u, 12f * u, 1.6f * u, p);
+            }
+        }
     }
 
     void menuMas() {
@@ -283,6 +392,7 @@ public class MainActivity extends Activity {
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             try { WebViewCompat.addDocumentStartJavaScript(web, PUENTE_JS, origenes); } catch (Throwable ignored) {}
+            try { WebViewCompat.addDocumentStartJavaScript(web, QUITAR_AVISO_JS, new HashSet<>(Arrays.asList("https://script.google.com"))); } catch (Throwable ignored) {}
         }
 
         web.setWebViewClient(new WebViewClient() {
@@ -298,7 +408,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView v, String url) {
-                if (!errorPrincipal) capa.setVisibility(View.GONE);
+                if (!errorPrincipal) { capa.setVisibility(View.GONE); pintarBarrasSistema(BARRA, true); }
             }
 
             @Override
