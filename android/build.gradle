@@ -1,0 +1,38 @@
+plugins { id 'com.android.application' version '8.5.2' }
+
+def vCode = (project.findProperty('vCode') ?: '1').toString().toInteger()
+
+android {
+    namespace 'pe.maveba.agenda'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'pe.maveba.agenda'
+        minSdk 24
+        targetSdk 34
+        versionCode vCode
+        versionName "1." + vCode
+    }
+    signingConfigs {
+        release {
+            storeFile file('maveba.jks')
+            storePassword System.getenv('KS_PASS')
+            keyAlias 'maveba'
+            keyPassword System.getenv('KS_PASS')
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    lint { abortOnError false; checkReleaseBuilds false }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.11.0'
+}
